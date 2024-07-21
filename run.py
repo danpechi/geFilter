@@ -2,6 +2,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 from transformers import GPT2Tokenizer, GPT2LMHeadModel, AdamW
 from datasets import load_dataset
+import pandas as pd
 
 from utils.data import CustomDataset
 

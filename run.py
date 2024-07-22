@@ -86,8 +86,6 @@ def train_obs():
         for i, (texts, input_ids, attention_mask) in enumerate(dataloader):
             if input_ids.size(1) == 0:
                 continue
-            if input_ids.size(0) < 2:
-                continue
 
             input_ids = input_ids.cuda()
             attention_mask = attention_mask.cuda()

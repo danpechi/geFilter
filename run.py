@@ -125,7 +125,7 @@ def train_obs():
 
 
 
-selected_samples = train()
+selected_samples = train_obs()
 
 print("Analyzing selected samples based on conditional entropy...")
 data = [(idx, text) for idx, text in selected_samples]

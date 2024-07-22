@@ -1,12 +1,14 @@
 import torch
 from torch.utils.data import DataLoader, Dataset
-from transformers import GPT2Tokenizer, GPT2LMHeadModel, AdamW
+from transformers import GPT2Tokenizer, GPT2LMHeadModel, AdamW, GPT2Config
 from datasets import load_dataset
 import pandas as pd
+
 
 from utils.data import CustomDataset
 
 from utils.grad_norm import precompute_gradient_norms, compute_gradient_norm
+from utils.conditional_entropy import conditional_entropy_selection
 
 
 def train_on_selected_samples(selected_samples, model, optimizer):
@@ -58,14 +60,77 @@ def train():
 
     return selected_samples
 
+
+def train_obs():
+    tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+    tokenizer.pad_token = tokenizer.eos_token
+
+    config = GPT2Config()
+    model = GPT2LMHeadModel(config)
+    model.train()
+    model.cuda()
+
+    dataset = load_dataset('wikitext', 'wikitext-2-raw-v1')
+    train_texts = dataset['train']['text']
+
+    train_dataset = CustomDataset(train_texts, tokenizer)
+    dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+
+    optimizer = AdamW(model.parameters(), lr=5e-5)
+
+    selection_fn = conditional_entropy_selection()
+
+    all_selected_samples = []
+
+    for epoch in range(1):  # Number of epochs
+        for i, (texts, input_ids, attention_mask) in enumerate(dataloader):
+            if input_ids.size(1) == 0:
+                continue
+
+            input_ids = input_ids.cuda()
+            attention_mask = attention_mask.cuda()
+            target = input_ids.cuda()
+
+            selected_indices, metrics_to_log, _ = selection_fn(
+                selected_batch_size=8,  # Number of samples to select
+                data=input_ids,
+                target=target,
+                global_index=torch.arange(i * dataloader.batch_size, (i + 1) * dataloader.batch_size),
+                large_model=model,
+                num_mc=5,
+                num_classes=model.config.vocab_size
+            )
+
+            selected_texts = [texts[idx] for idx in selected_indices]
+            selected_input_ids = input_ids[selected_indices]
+            selected_attention_mask = attention_mask[selected_indices]
+
+            batch_input_ids = selected_input_ids.cuda()
+            batch_attention_mask = selected_attention_mask.cuda()
+
+            outputs = model(batch_input_ids, attention_mask=batch_attention_mask, labels=batch_input_ids)
+            loss = outputs.loss
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+
+            all_selected_samples.extend([(idx.item(), texts[idx]) for idx in selected_indices])
+            del input_ids_chunk, attention_mask_chunk, target_chunk, selected_input_ids, selected_attention_mask
+            torch.cuda.empty_cache()
+
+            if i % 100 == 0:
+                print(f"Epoch {epoch}, Step {i}, Loss: {loss.item()}")
+
+    return all_selected_samples
+
+
+
 selected_samples = train()
 
-# Analyze selected samples
-print("Analyzing selected samples based on gradient norm...")
-
-data = [(grad_norm, text) for grad_norm, text, _, _ in selected_samples]
-df = pd.DataFrame(data, columns=['Grad Norm', 'Text'])
+print("Analyzing selected samples based on conditional entropy...")
+data = [(idx, text) for idx, text in selected_samples]
+df = pd.DataFrame(data, columns=['Index', 'Text'])
 print(df)
 
-# Save DataFrame to a CSV file
-df.to_csv('selected_samples.csv', index=False)
+csv_filename = 'selected_samples.csv'
+df.to_csv(csv_filename, index=False)

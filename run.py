@@ -115,7 +115,7 @@ def train_obs():
             optimizer.zero_grad()
 
             all_selected_samples.extend([(idx.item(), texts[idx]) for idx in selected_indices])
-            del input_ids_chunk, attention_mask_chunk, target_chunk, selected_input_ids, selected_attention_mask
+
             torch.cuda.empty_cache()
 
             if i % 100 == 0:

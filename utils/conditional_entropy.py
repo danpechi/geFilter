@@ -14,6 +14,7 @@ def compute_conditional_entropy(log_probs):
     return conditional_entropy.mean(dim=0)
 
 def top_x_indices(tensor, x, largest=True):
+    x = min(x, tensor.size(0))  # Ensure x does not exceed tensor size
     indices = torch.topk(tensor, x, largest=largest).indices
     not_selected = torch.topk(tensor, tensor.size(0) - x, largest=not largest).indices
     return indices, not_selected
